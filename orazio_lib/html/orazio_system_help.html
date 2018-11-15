@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Orazio Robot Web Controller</title>
+</head>
+<body>
+  <object type="text/html" data="menu.html">
+    <p>backup content</p>
+  </object>
+  <p>
+    <H2>What to tune in the system?</H2>
+    The system parameters include general settings of the controller, the communication and the type of H bridge you use. <br/>
+  </p>
+
+
+    <p> <H3>watchdog_cycles</H3>
+      Another parameter that is relevant is the watchdog. This number controls the number of cycles the robot can tolerate the lack of communication from the host. If the host is silent for more than <i>watchdog_cycles</i>, the robot assumes something went wrong on the PC side and turns off the motors. Usually this is set to 50 cycles, that means half a second. During the calibration you can disable the watchdog, by setting it to 0. <b>Remember to enable the watchdog again
+      after calibration, otherwise your robot will follow the last command forever, even if the PC crashes</b>
+    </p>
+
+    <p> <H3>periodic_packet_mask</H3>
+      Since the communication is based on the trade of different packets, we can choose which packet to send using the <i>periodic_packet_mask</i>. In order to allow the firmware to send a packet, just sum its identifier to the mask.<br/> The following table will contain identifier of the package.<br/>
+      <table align="center" border="3">
+        <tbody>
+          <tr>
+            <td valign="top" align="center" width="150"><b>PACKET</b></td>
+            <td valign="top" align="center" width="30"><b>ID</b></td>
+          </tr>          
+          <tr>
+            <td valign="top" align="center">System Status Packet</td>
+            <td valign="top" align="center">1</td>
+          </tr>
+          <tr>
+            <td valign="top" align="center">Joint Status Packet</td>
+            <td valign="top" align="center">2</td>
+          </tr>
+          <tr>
+            <td valign="top" align="center">Drive Status Packet</td>
+            <td valign="top" align="center">4</td>
+          </tr>
+          <tr>
+            <td valign="top" align="center">Sonar Status Packet</td>
+            <td valign="top" align="center">8</td>
+          </tr>
+        </tbody>
+      </table>
+
+    </p>
+    <H2>Once everything has been set up, and all goes well, save the parameters on the EEPROM by pressing the SET button for each parameter you changed, then SEND and STORE for saving the parameters of the EEPROM. Press the button on the bottom of the Joints page.</H2>
+  </body>
+  </html>

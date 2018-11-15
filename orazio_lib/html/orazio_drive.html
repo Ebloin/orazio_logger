@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+    <script src="orazio.js" type="text/javascript"></script>
+  </head>
+  <body>
+<table border="2">
+  <tr>
+    <H2>
+    <td> <a href="orazio_system.html?system" target="_parent"> System </a> </td>
+    <td> <a href="orazio_joint0.html?joint0" target="_parent"> Joint0 </a> </td>
+    <td> <a href="orazio_joint1.html?joint1" target="_parent"> Joint1 </a> </td>
+    <td> <a href="orazio_drive.html?kinematics" target="_parent"> Drive </a> </td>
+    <td> <a href="orazio_sonar.html?sonar" target="_parent"> Sonar </a> </td>
+    <td> <a href="orazio_joystick.html?kinematics" target="_parent"> Joystick </a> </td>
+    </H2>
+  </tr>
+</table>
+    <p>
+      <H1>Kinematics Settings</H1>
+    </p>
+    <p>
+      <h2>
+ <a href="orazio_drive_help.html"> Click here for help </a>
+      </h2>
+    </p>
+    <p>
+      <table border="2">
+ <tr>
+   <td> <div id='msgBox'>Nothing sent yet!</div> </td>
+   <td>
+<p> <table border="3">
+<tr>
+   <td valign="top"> drive_params.ikr </td>
+   <td> <input width="100px" type="text" id="drive_params_ikr" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.ikr')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.ikl </td>
+   <td> <input width="100px" type="text" id="drive_params_ikl" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.ikl')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.baseline </td>
+   <td> <input width="100px" type="text" id="drive_params_baseline" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.baseline')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.right_joint_index </td>
+   <td> <input width="100px" type="text" id="drive_params_right_joint_index" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.right_joint_index')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.left_joint_index </td>
+   <td> <input width="100px" type="text" id="drive_params_left_joint_index" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.left_joint_index')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.max_translational_velocity </td>
+   <td> <input width="100px" type="text" id="drive_params_max_translational_velocity" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.max_translational_velocity')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.max_translational_acceleration </td>
+   <td> <input width="100px" type="text" id="drive_params_max_translational_acceleration" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.max_translational_acceleration')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.max_translational_brake </td>
+   <td> <input width="100px" type="text" id="drive_params_max_translational_brake" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.max_translational_brake')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.max_rotational_velocity </td>
+   <td> <input width="100px" type="text" id="drive_params_max_rotational_velocity" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.max_rotational_velocity')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_params.max_rotational_acceleration </td>
+   <td> <input width="100px" type="text" id="drive_params_max_rotational_acceleration" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_params.max_rotational_acceleration')"/> SET</td>
+</tr>
+</table> </p>
+     </td>
+ </tr>
+ <tr>
+          <table border="2">
+          <tr>
+     <td> <button type="button" onclick="stop()">STOP</button> </td>
+     <td> <button type="button" onclick="sendPacket('drive_params')">SEND</button> </td>
+     <td> <button type="button" onclick="storeParams('drive_params')">STORE</button> </td>
+     <td> <button type="button" onclick="fetchParams('drive_params')">FETCH</button> </td>
+     <td> <button type="button" onclick="requestParams('drive_params')">REQUEST</button> </td>
+          </tr>
+          </table>
+   </tr>
+ <tr>
+<p> <table border="3">
+<tr>
+   <td valign="top"> drive_control.translational_velocity </td>
+   <td> <input width="100px" type="text" id="drive_control_translational_velocity" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_control.translational_velocity')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> drive_control.rotational_velocity </td>
+   <td> <input width="100px" type="text" id="drive_control_rotational_velocity" /> </td>
+   <td> <button type="button" onclick="setVariable('drive_control.rotational_velocity')"/> SET</td>
+</tr>
+</table> </p>
+   </tr>
+ <tr>
+   <td> <button type="button" onclick="stop()">STOP</button> </td>
+   <td> <button type="button" onclick="sendPacket('drive_control')">SEND</button> </td>
+   </tr>
+      </table>
+    </p>
+  </body>
+</html>

@@ -1,0 +1,58 @@
+PREFIX=../
+CC=gcc
+INCLUDE_DIRS=-I$(PREFIX)/src/common -I$(PREFIX)/src/orazio_host/ 
+CC_OPTS=-Wall -Ofast --std=gnu99 $(INCLUDE_DIRS)
+
+
+LIBS=-lpthread -lreadline -lwebsockets
+
+
+LOBJS = packet_handler.o\
+	deferred_packet_handler.o\
+	orazio_client.o\
+	orazio_print_packet.o\
+	serial_linux.o\
+
+OBJS = 	ventry.o\
+	orazio_shell_globals.o\
+	orazio_shell_commands.o\
+	orazio_ws_server.o
+
+
+HEADERS = packet_header.h\
+	  packet_operations.h\
+	  packet_handler.h\
+	  deferred_packet_handler.h\
+	  orazio_packets.h\
+	  orazio_print_packet.h\
+	  ventry.h
+
+BINS= 	orazio\
+	orazio_client_test
+
+
+.phony:	clean all
+
+all:	$(BINS) 
+
+#common objects
+%.o:	$(PREFIX)/src/common/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#host test
+%.o:	$(PREFIX)/src/host_test/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#client 
+%.o:	$(PREFIX)/src/orazio_host/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+orazio: orazio.o $(OBJS) $(LOBJS)
+	$(CC) $(CC_OPTS) -o $@ $< $(OBJS) $(LOBJS) $(LIBS)
+
+orazio_client_test:  orazio_client_test.o orazio_client_test_getkey.o $(LOBJS)
+	$(CC) $(CC_OPTS) -o $@ $^ $(LIBS)
+
+clean:
+	rm -rf $(OBJS) $(BINS) *~ *.d *.o
+

@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+  </head>
+  <body>
+    <object type="text/html" data="menu.html">
+      <p>backup content</p>
+    </object>
+    <p>
+      <H2>What to tune in the kinematics?</H2>
+      Here we will tell our robot how big it is and how large its wheel are.
+      We will also adjust the acceleration ramps to tradeoff battery-consumption,
+      reactivity and smoothness.
+
+      Normally we would like to control our robot in standard units,
+      with translational velocities expressed as meters per second,
+      and rotational velocities expressed in radiants per second.  So
+      far our universe consists of encoder ticks and PWM values.
+      Still the system internally has to deal with these quantities,
+      but we want to expose a more abstract interface.  To this extent
+      we need to relate meters and seconds to encoder ticks (that
+      seems to be the universal measure in our little firmware world,
+      like king's arm for measuring the distances).
+
+      At the end of this section we will be able to impose to the base
+      velocities in standard units.
+
+    </p>
+    <p>
+      <H3> Motor indices and sign of kr/kl </H3> 
+      The first step is to fugure out what is the left and the right motor in the platform.
+      We have two motors, so two joints 0 and 1. To discover what is right motor, turn
+      the right wheel <i> forward </i> with your hand. you will see one of the encoder counts changing
+      in the Joint Status box on the top. That motor is the right one.
+      <b> If the encoder count grows when you turn the wheel, you might expect a positive <i>kr</i>,
+      otherwise a negative value </b>.
+      Enter in the caption <i> right motor index </i> the number of the right joint. <br/>
+
+      Repeat the procedure for the left joint, and update the <i> left
+      motor index </i>.  You have just assigned the motors.  The same
+      considerations we made for <i>kr</i> hold for <i>kl</i>.  Save
+      the parameters on the eeprom.<br/>
+
+      Assign a nominal value to <i>kr</i> and <i>kl</i> (e.g. 1e-5),
+      respecting the signs you have found before.  Thus, if you have
+      found a positive <i>kr</i> and a negative <i>kl</i>,
+      enter <i>1e-5</i> in the <i>kr</i> caption and
+      <i>-1e-5</i> in the <i>kl</i> caption.
+
+      To see if the things work all right, enter in the caption "base velocities" 
+      <ul>
+	<li>
+	  enter 1 to <i>translational_velocity</i> and 0 to <i>rotational_velocity</i>, the wheels should both move forward. 
+	</li>
+	<li>
+	  enter -1 to <i>translational_velocity</i> and 0 to <i>rotational_velocity</i>, the wheels should both move backwards. 
+	</li>
+	<li>
+	  enter 0 to <i>translational_velocity</i> and 1 to <i>rotational_velocity</i>, the wheels should move as if the platform turns right. 
+	</li>
+	<li>
+	  enter 0 to <i>translational_velocity</i> and -1 to <i>rotational_velocity</i>, the wheels should move as if the platform turns left. 
+	</li>
+      </ul>
+    </p>
+    If the above test does not work, you probably have made a mistake.
+
+    <p>
+      <H3> Baseline </H3>
+      Take a meter and measure the distance between the wheel. This is the baseline.
+      Enter the value (in meters) in the caption <i>baseline</i>
+      Save on eeprom.
+    </p>
+
+    <p>
+      <H3> Kr/KL and Baseline </H3>
+      <i>kr</i> and  <i>kl</i> are the conversion coefficients telling how many meters a wheel moves forward,
+      when the encoder measures the motion of one tick. These values are expressed in meters per tick.
+      You might find more convenient to measure the ticks per meter, and some calibration tools report
+      numbers such as the forward motion per appearant wheel diameter. <br/>
+      It is for this reason that you can enter this parameter in three possible ways, but remember,
+      it represent the same entity. The only value inside the firmware is kr/kl in meters per tick,
+      and this is the value displayed in the kinematics parameters status box on the top of the window.
+
+      To give an initial value to kr/kl proceed as follows:
+      <ul>
+	<li> go to the <a href="orazio_joystick.html?joystick" target="_parent"> Joystick </a> and connect a joy</li>
+	<li> move the left stick forward and backward and see if you can control the translational velocity</li>
+	<li> move the right stick left and right and see if you can control the rotational velocity</li>
+	<li> reset the platform (press the reset key on the arduino), this should zero the encoder counts. Alternatively,
+	save all parameters so far in eeprom, shut down the websocket server and disconnect the arduino from the usb. This does a reset.</li>
+	<li> connect arduino and restart the websocket server </li>
+	<li> refresh this page </li>
+	<li> the encoder_position field of the joints should be zero for both joints </li>
+	<li> take a meter and measure 1 meter on the ground, in front of the robot </li>
+	<li> with the joystick, move the robot to travel 1 meter, the encoder position will increase/decrease as you move. <b>Consider only the joint with increasing value </b> </li>
+	<li> after 1 meter, write down the number <i> encoder position </i>. If the encoder has a high resolution the number might wrap around. You will have to select a shorter
+	distance for calibrating, let's say 10 cm</li>
+	<li> the "nominal" values of kl/kr is the distance in meters you choose for calibrarion divided by the encoder_position. Instead of making the division,
+	  if you move for 1 meter, you can enter the value encoder_position in <i>ikr</i> and <i>ikl</i>, that stand for inverse kl and inverse kr.
+	  Thus, assuming you move 1 meter, the right joint is the joint 0 with positive kr, the left joint is joint 1 and has a negative kl (thus was decreasing).
+	  You consider the encoder_position of the increasing joint (in this case joint 0). Let us assume that the value of encoder_position of the joint 0 is 30000.
+	  To calibrate the ticks you enter 30000 in <i>ikr</i> and -30000 <i>ikl</i> (remember the signs?). Save on eeprom.  
+      </ul>
+      Congratulations, you made your first rude odometry calibration. To check if it makes sense, connect the joystick, reset the platform and move for 1 meter in front.
+      The <i>x</i> field of the kinematics status should be roughly 1.
+      Turn 90  degrees counterclockwise. The <i>theta</i> field should be around 1.57. 
+    </p>
+
+    <p>
+      <H3> Velocities and Accelerations </H3>
+      The last step is to configure your platform by limiting the speeds and the acceleration ramps. The nominal values are usually ok.
+      Setting to low acceleration ramps too low might result in the platform not moving at all. Thus for these tests set the accelerations
+      to rather high values.
+    </p>
+
+  </body>
+</html>

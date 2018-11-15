@@ -1,0 +1,88 @@
+PREFIX=../..
+ARCH=arch/atmega328
+CC=avr-gcc
+INCLUDE_DIRS=-I$(PREFIX)/src/common -I$(PREFIX)/src/arch/include -I$(PREFIX)/src/orazio_firmware
+CC_OPTS=-Wall --std=gnu99 -DF_CPU=16000000UL    -Ofast -funsigned-char -funsigned-bitfields  -fshort-enums -Wall -Wstrict-prototypes -mmcu=atmega328 -D_ARDUINO_328_ $(INCLUDE_DIRS)
+
+
+AVRDUDE=avrdude
+
+# com1 = serial port. Use lpt1 to connect to parallel port.
+# AVRDUDE_PORT = /dev/ttyUSB0    # programmer connected to serial device
+AVRDUDE_PORT = /dev/ttyACM0    # programmer connected to serial device	
+
+AVRDUDE_WRITE_FLASH = -U flash:w:$(TARGET):i
+AVRDUDE_FLAGS = -p m328p -P $(AVRDUDE_PORT) -c $(AVRDUDE_PROGRAMMER) -b 115200
+AVRDUDE_FLAGS += $(AVRDUDE_NO_VERIFY)
+AVRDUDE_FLAGS += $(AVRDUDE_VERBOSE)
+AVRDUDE_FLAGS += $(AVRDUDE_ERASE_COUNTER)
+AVRDUDE_FLAGS += -D -q -V -C /usr/share/arduino/hardware/tools/avr/../avrdude.conf
+AVRDUDE_FLAGS += -c arduino
+
+OBJS=pins.o\
+     uart.o\
+     timer.o\
+     eeprom.o\
+     encoder.o\
+     delay.o\
+     digio.o\
+     pwm.o\
+     packet_handler.o\
+     deferred_packet_handler.o\
+     orazio_globals.o\
+     orazio_param.o\
+     orazio_comm.o\
+     orazio_joints.o\
+     orazio_joints_internal.o\
+     orazio_hbridge_internal.o\
+     orazio_drive_internal.o\
+     orazio_drive.o\
+     orazio_watchdog.o
+
+HEADERS=packet_header.h\
+	packet_operations.h\
+	packet_handler.h\
+	deferred_packet_handler.h\
+	buffer_utils.h\
+
+BINS= uart_test.elf\
+      timer_test.elf\
+      encoder_test.elf\
+      eeprom_test.elf\
+      digio_test.elf\
+      pwm_test.elf\
+      packet_send_test.elf\
+      packet_echo_test.elf\
+      packet_query_response_test.elf\
+    orazio.elf
+
+.phony:	clean all
+
+all:	$(BINS)
+
+#common objects
+%.o:	$(PREFIX)/src/common/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#peripherials
+%.o:	$(PREFIX)/src/$(ARCH)/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#peripherial test
+%.o:	$(PREFIX)/src/micro_test/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#orazio server objects
+%.o:	$(PREFIX)/src/orazio_firmware/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+%.elf:	%.o $(OBJS)
+	$(CC) $(CC_OPTS) -o $@ $< $(OBJS) $(LIBS)
+
+clean:
+	rm -rf $(OBJS) $(BINS) *.hex *~ *.o
+
+%.hex:	%.elf
+	avr-objcopy -O ihex -R .eeprom $< $@
+	$(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:w:$@:i $(AVRDUDE_WRITE_EEPROM) 
+	rm $@

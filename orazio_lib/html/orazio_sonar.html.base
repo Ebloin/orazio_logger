@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+    <script src="orazio.js" type="text/javascript"></script>
+  </head>
+  <body>
+    #include "menu.html"
+    <p>
+      <H1>System Settings</H1>
+    </p>
+    <p>
+      <h2>
+	<a href="orazio_sonar_help.html"> Click here for help </a>
+      </h2>
+    </p>
+    <p>
+      <table border="2">
+	<tr> 
+	  <td> <div id='msgBox'>Nothing sent yet!</div> </td>
+	  <td>
+	    #include"sonar_params.html"
+  	  </td>
+	</tr>
+	<tr>
+          <table border="2">
+            <tr>
+	      <td> <button type="button" onclick="stop()">STOP</button> </td>
+	      <td> <button type="button" onclick="sendPacket('sonar_params')">SEND</button> </td> 
+	      <td> <button type="button" onclick="storeParams('sonar_params')">STORE</button> </td> 
+	      <td> <button type="button" onclick="fetchParams('sonar_params')">FETCH</button> </td> 
+	      <td> <button type="button" onclick="requestParams('sonar_params')">REQUEST</button> </td>
+              
+ 	    </tr>
+          </table>
+   	</tr>
+      </table>
+    </p>
+</body>
+</html>

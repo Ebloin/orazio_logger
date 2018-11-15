@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+  </head>
+  <body>
+    #include "menu.html"
+      <p>
+	Click the above buttons to configure the parameters of orazio<br/>
+	The calibration procedure is sequential and assumes you follow this order:
+	<ul>
+	  <li>System</li>
+	  <li>Joints</li>
+	  <li>Kinematics</li>
+	</ul>
+	At the end, if you are lucky you can try to steer the new orazio
+	with a joystick connected to the browser.
+      </p>
+  </body>
+</html>

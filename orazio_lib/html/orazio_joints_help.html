@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Orazio Robot Web Controller</title>
+</head>
+<body>
+  <object type="text/html" data="menu.html">
+    <p>backup content</p>
+  </object>
+  <p>
+    <H1>What to tune in the joints?</H2>
+      Here you will connect the encoders, veryfy the H bridge and check that all connections are properly made.
+      The process is incremental, you will check the things one at a time while doing them. If you make some mistake
+      the probablity that you damage some hardware is rather small.
+    </p>
+    <p>
+      <H3> Connecting and checking the encoders </H3>
+      You need to connect the encoders to arduino and verify if they are correctly sensed.
+      Here are the connections:
+      <ul>
+       Power (for both motors)
+       <ul>
+         <li> power (+5v), is the <b>blue</b> wire on the motors. It can go to any of the +5v outputs of the arduino. </li>
+         <li> GND, is the <b> green </b>  wire on the motors. It can go to any of the GND outputs of the arduino. </li>
+       </ul>
+       <li> right motor </li> 
+       <ul>
+         <li> phase_a, is the <b>yellow</b> wire, on pin 50 of arduino. </li>
+         <li> phase_b, is the <b>white</b> wire, on pin 51 of arduino </li>
+       </ul>
+       <li> left motor </li> 
+       <ul>
+         <li> phase_a, is the <b>yellow</b> wire, on pin 52 of arduino. </li>
+         <li> phase_b, is the <b>white</b> wire, on pin 53 of arduino </li>
+       </ul>
+     </ul>
+
+     Once you have done the above connection you can check if it works by manually rotating the wheels.
+     If you go on the <a href="orazio_joints.html?joints" target="_parent"> Joints </a> page you should be able
+     to see the numbers in the field <i>encoder_position</i> changing when you rotate the wheel.
+     They should increase when you rotate in one direction and decrease when you rotate in the other.<br/>
+     If this is not the case, you made something wrong with the connections. Check them again,
+     and connect the motors one at a time.
+
+   </p>
+
+    <b>IMPORTANT</b><br/>
+    Set the correct motor mode before connecting the H Bridge,
+    and save the parameter to the eeprom.
+
+   <p>
+
+     <H3> Connecting and checking the H bridge </H3>
+     Done with the encoders? It is now time to connect the H bridge.
+     There are three most common types of H bridges, each one has a different way to be controlled.
+     The current firmware on megag560 supports these three types:
+    <ul>
+      <li><b>PWM and DIR (h_bridge_type=0)</b>:
+        <ul>
+          <li>pin 0: PWM is an analog output, encodes magnitude of the speed, the higher the value the faster the motor will spin)</li>
+          <li>pin 1: DIR is a digital output. encodes the sign of the speed (_5V, negative, 0V positive)
+          <li>pin 2: Brake is a digital pin, when set to 1 it sets the bridge in brake mode.
+                     If not used assign it to some unused pin in the board in the range 1-13.
+        </ul>
+      </li>
+      <li><b>DUAL PWM (h_bridge_type=1)</b>:
+        these bridges use two wires that are mutually exclusive and control two directions of rotation. To get the motor rotating in a direction, they issue the PWM on the corresponding pin and leave the other one to 0.
+        <ul>
+          <li>pin 0: PWM for forward direction, is an analog output</li>
+          <li>pin 1: PWM for backward direction, is an analog output</li>
+          <li>pin 2: unused</li>
+        </ul>        
+        The <b>red L298N board</b> suggested in MARRtino web site uses this mode.  
+      </li>
+      <li><b>Half Cycle PWM(h_bridge_type=2)</b>: please check the datasheet of the bridge to figure out how to connect the pins.
+        these bridges use a single wire to encode the both speed and direction of the motor. A 50% of duty cycle means the motor is still,
+        a 100% means the motor moves forward at maximum speed, a 0% means the motor will move backwards at maximum speed
+        <ul>
+          <li>pin 0: PWM for forward/backward direction, is an analog output</li>
+          <li>pin 2: enable, when at logical 1 the ridge is powered (optional). Is a digital pin</li>
+        </ul>        
+      </li>
+    </ul>
+    After setting the pins according to the specs of your board you can safely to connect the H bridge.
+
+    After connecting the H bridge, but without connecting the motors, you can check
+    if everything is right using a tester. <br/>
+    To this end, power the H bridge by connecting the battery in to a 12V source. <br\>
+    In this stage, it is convenient to disable the watchdog, by setting to 0 the watchdog_cycles in 
+    <a href="orazio_system.html?system" target="_parent"> System </a>.
+    In this way the control we send to the board will be executed forever and we have more
+    time for debugging. <br/>
+    With a tester at hand measure the voltage in the motor outputs of the bridge.<br/>
+
+    Joints have 3 working mode as show in following table. <br/><br/>
+
+    <table align="center" border="3">
+      <tbody>
+        <tr>
+          <td valign="top" align="center" width="110"><b>JOINT MODE</b></td>
+          <td valign="top" align="center" width="30"> <b>ID</b> </td>
+        </tr>
+        <tr>
+          <td valign="top" align="center">Joint Disabld</td>
+          <td valign="top" align="center">0</td>
+        </tr>
+        <tr>
+          <td valign="top" align="center">PWM</td>
+          <td valign="top" align="center">1</td>
+        </tr>
+        <tr>
+          <td valign="top" align="center">PID</td>
+          <td valign="top" align="center">2</td>
+        </tr>
+      </tbody>
+    </table><br/>
+
+    For each joint separately, set the joint mode to 1 and issue a speed of 255 in the speed caption, and measure the voltage. You should
+    get a high value. Be sure you are measuring the correct output. you have 2 motors.
+    Do the same for with a negative value of -255, and check the voltage. You should a number having an opposite sign
+    w.r.t before (you are giving a negative voltage after all). Check if the outputs are consistent.<br/>
+    Finally, click the STOP button.<br/>
+
+    If this does not work, you might have made a mistake. 
+    Check the wires and the pins again, and be sure the H bridge is
+    of the correct type.
+  </p>
+
+  <p>
+   <H3> Connecting the motors </H3>
+   Ok, the bridge is working, time to see the wheels moving. Connect
+   the motors to the output channels of the bridge.  Here are the
+   connections for our two types of H bridge:
+   <ul>
+     <li>Arduino Motor Board
+      <ul>
+        <li>Motor shield out - motors (red + /black -) </li>
+      </ul>
+    </li>
+    <li>L298N
+      <ul>
+        <li>L298N Out1 - Left Motor black</li>
+        <li>L298N Out2 - Left Motor red</li>
+        <li>L298N Out3 - Right Motor black</li>
+        <li>L298N Out4 - Right Motor red</li>
+      </ul>
+    </ul>
+    Here you can basically make the following mistakes:
+    <ul>
+     <li>swapping the motors</li>
+     <li>inverting the motor polarity</li>
+   </ul>
+   None of the above mistakes is destructive, and they can be easily
+   fixed.<br/>
+   With the motors connected, set <i>joints[0].mode</i> to 1 and issue a 100 in the <i>joints[0].speed</i> box
+   of the <a href="orazio_joints.html?joints" target="_parent">
+   Joints</a> page.
+   You should see one of the motors <b>slowly</b> running in one direction.
+   Check that the <i>encoder_position</i> of the joint 0 is changing.
+   If this not the case you swapped the motors, and you have to swap the
+   left and the right motor.<br/>
+
+   If motor velocity is high and does not depend on the PWM command value,
+   check that the number reported in "desired_speed" for that joint has 
+   the same sign of the PWM command you issue. 
+   For example, 100 on the joint 0 should result in a positive desired speed, while
+   -100 should result in a negative one.  If this is not the
+   case, check connections and swap either the encoders connection or 
+   the polarity of the motor on the H bridge. <br/>
+
+   Repeat the test for the other motor, issuing 100 and -100 in the <i>joints[1].speed</i> field, setting also the <i>joints[1].mode</i> to 1.
+   Once all is working you can go to the next step. <br/>
+ </p>
+
+
+ <p>
+   <H3> Open Loop Tuning </H3>
+   Another parameter that is relevant for controlling a motor is the "detach current".
+   Motors require a minimum voltage to rotate. If you issue a voltage below that level,
+   the motor will not move and consime power anyway. We don't like this.
+   So we need to find the minimum voltage (that in our case is the PWM value) to
+   issue to the motor and expect a movement.
+   To find this value for each motor individually, start incrementing the pwm command
+   from "0" to "N" in steps of 10. The <i>pwm_min</i> value is the minimum value for which the motor
+   moves.
+   Save this value as "pwm_min" in the corresponding joint parameter.
+   For "pwm_max" you can leave the default value.
+ </p>
+
+ <p>
+  <H3> PID tuning </H3>
+  The motors are controlled in closed loop, and they get the feedback from the encoder.
+  This means during normal operation,  you tell the encoder a speed expressed as
+  ticks per cycle, and the controller will adjust the PWM to match that
+  value.
+  Normally the parameters of the PID in the default configuration are adequate.
+  For a better tuning you can just follow a  PID tuning tutorial on the web.<br/>
+
+  Still you can check that the PID does a decent job.
+  Enable the PID controller with <i>joints[0].mode</i> equals to 2 and issue a 10 to on the <i>joints[0].speed</i>. You should see
+  the "desired_speed" in the status_box, and the "encoder_speed" reaching similar values.
+  Try to brake the motor, and you will see that the controller will increase the PWM
+  to keep the speed at a desired level.
+
+  Do the same with the other motor,
+  You are done with the joints. 
+</p>
+
+<H2>If you reach this step, and all goes well, save the parameters on the EEPROM. Press the button on the bottom of the Joints page.</H2>
+
+</body>
+</html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+    <script src="orazio.js" type="text/javascript"></script>
+  </head>
+  <body>
+<table border="2">
+  <tr>
+    <H2>
+    <td> <a href="orazio_system.html?system" target="_parent"> System </a> </td>
+    <td> <a href="orazio_joint0.html?joint0" target="_parent"> Joint0 </a> </td>
+    <td> <a href="orazio_joint1.html?joint1" target="_parent"> Joint1 </a> </td>
+    <td> <a href="orazio_drive.html?kinematics" target="_parent"> Drive </a> </td>
+    <td> <a href="orazio_sonar.html?sonar" target="_parent"> Sonar </a> </td>
+    <td> <a href="orazio_joystick.html?kinematics" target="_parent"> Joystick </a> </td>
+    </H2>
+  </tr>
+</table>
+    <p>
+      <H1>System Settings</H1>
+    </p>
+    <p>
+      <h2>
+ <a href="orazio_sonar_help.html"> Click here for help </a>
+      </h2>
+    </p>
+    <p>
+      <table border="2">
+ <tr>
+   <td> <div id='msgBox'>Nothing sent yet!</div> </td>
+   <td>
+<p> <table border="3">
+<tr>
+   <td valign="top"> sonar_params.pattern[0] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_0_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[0]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[1] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_1_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[1]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[2] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_2_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[2]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[3] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_3_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[3]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[4] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_4_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[4]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[5] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_5_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[5]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[6] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_6_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[6]')"/> SET</td>
+</tr>
+<tr>
+   <td valign="top"> sonar_params.pattern[7] </td>
+   <td> <input width="100px" type="text" id="sonar_params_pattern_7_" /> </td>
+   <td> <button type="button" onclick="setVariable('sonar_params.pattern[7]')"/> SET</td>
+</tr>
+</table> </p>
+     </td>
+ </tr>
+ <tr>
+          <table border="2">
+            <tr>
+       <td> <button type="button" onclick="stop()">STOP</button> </td>
+       <td> <button type="button" onclick="sendPacket('sonar_params')">SEND</button> </td>
+       <td> <button type="button" onclick="storeParams('sonar_params')">STORE</button> </td>
+       <td> <button type="button" onclick="fetchParams('sonar_params')">FETCH</button> </td>
+       <td> <button type="button" onclick="requestParams('sonar_params')">REQUEST</button> </td>
+
+      </tr>
+          </table>
+    </tr>
+      </table>
+    </p>
+</body>
+</html>

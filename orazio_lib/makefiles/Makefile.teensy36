@@ -1,0 +1,94 @@
+# set this to false to disable sonars in firmware
+#ORAZIO_USE_SONAR=false
+ORAZIO_USE_SONAR=false
+
+PREFIX=../../
+ARCH=arch/teensy36
+CC=/home/giorgio/arduino-1.8.5/hardware/tools/arm/bin/arm-none-eabi-gcc
+INCLUDE_DIRS=-I$(PREFIX)/src/common -I$(PREFIX)/src/arch/include -I$(PREFIX)/src/orazio_firmware
+CC_OPTS=-D__PROG_TYPES_COMPAT__ -DLAYOUT_US_ENGLISH -DUSB_SERIAL  -mcpu=cortex-m4 -DF_CPU=240000000  -DARDUINO=185 -DARDUINO_ARCH_ARM -I/home/giorgio/arduino-1.8.5/hardware/teensy/avr/cores/teensy3 -I/home/giorgio/arduino-1.8.5/hardware/teensy/arm/variants/ --std=gnu99  -O3 -Wall -ffunction-sections -Wall -fdata-sections -nostdlib -mthumb -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16 -fsingle-precision-constant -D__MK66FX1M0__ -DTEENSYDUINO=141 -std=gnu11 -flto -fno-fat-lto-objects -funsigned-char -funsigned-bitfields  -fshort-enums -Wall -Wstrict-prototypes  -D_TEENSY_36_ $(INCLUDE_DIRS) 
+
+OBJS=uart.o\
+     timer.o\
+     eeprom.o\
+     encoder.o\
+     delay.o\
+     digio.o\
+     pwm.o\
+     packet_handler.o\
+     deferred_packet_handler.o\
+     orazio_globals.o\
+     orazio_param.o\
+     orazio_comm.o\
+     orazio_joints_internal.o\
+     orazio_joints.o\
+     orazio_hbridge_internal.o\
+     orazio_drive_internal.o\
+     orazio_drive.o\
+     orazio_watchdog.o
+
+ifeq ($(ORAZIO_USE_SONAR),true)
+OBJS 	+= sonar.o orazio_sonar.o
+CC_OPTS += -D_ORAZIO_USE_SONAR_
+BINS 	+=  sonar_test.elf
+endif
+
+HEADERS=packet_header.h \
+	packet_operations.h \
+	packet_handler.h \
+	deferred_packet_handler.h \
+	buffer_utils.h \
+	orazio_comm.h \
+	orazio_drive.h \
+	orazio_drive_internal.h \
+	orazio_globals.h \
+	orazio_hbridge_internal.h \
+	orazio_joints.h \
+	orazio_joints_internal.h \
+	orazio_param.h \
+	orazio_pins.h \
+	orazio_sonar.h \
+	orazio_watchdog.h 
+
+BINS=  orazio.elf
+
+# uart_test.elf\
+#       timer_test.elf\
+#       encoder_test.elf\
+#       eeprom_test.elf\
+#       digio_test.elf\
+#       pwm_test.elf\
+#       packet_send_test.elf\
+#       packet_echo_test.elf\
+#       packet_query_response_test.elf\
+     
+.phony:	clean all
+
+all:	$(BINS)
+
+#common objects
+%.o:	$(PREFIX)/src/common/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#peripherials
+%.o:	$(PREFIX)/src/$(ARCH)/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#peripherial test
+%.o:	$(PREFIX)/src/micro_test/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+#orazio server objects
+%.o:	$(PREFIX)/src/orazio_firmware/%.c 
+	$(CC) $(CC_OPTS) -c  $<
+
+orazio.elf:	orazio.o $(OBJS)
+	$(CC) $(CC_OPTS) -o $@ $< $(OBJS) $(LIBS)
+
+clean:
+	rm -rf $(OBJS) $(BINS) *.hex *~ *.o
+
+%.hex:	%.elf
+	avr-objcopy -O ihex -R .eeprom $< $@
+	$(AVRDUDE) $(AVRDUDE_FLAGS) -U flash:w:$@:i $(AVRDUDE_WRITE_EEPROM) 
+	rm $@

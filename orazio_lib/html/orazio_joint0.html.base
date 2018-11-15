@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Orazio Robot Web Controller</title>
+    <script src="orazio.js" type="text/javascript"></script>
+  </head>
+  <body>
+    #include "menu.html"
+    <p>
+      <H1>Joint0 Settings</H1>
+    </p>
+    <p>
+      <h2>
+	<a href="orazio_joints_help.html"> Click here for help </a>
+      </h2>
+    </p>
+    <p>
+      <table border="2">
+	<tr> 
+	  <td> <div id='msgBox'>Nothing sent yet!</div> </td>
+          <td>
+	    #include"joint0_params.html"
+	  </td>
+	</tr>
+	<tr>
+          <table border="2">
+            <tr>
+	      <td> <button type="button" onclick="stop()">STOP</button> </td>
+              <td> <button type="button" onclick="sendPacket('joint_params[0]')">SEND</button> </td>
+              <td> <button type="button" onclick="storeParams('joint_params[0]')">STORE</button> </td>
+              <td> <button type="button" onclick="fetchParams('joint_params[0]')">FETCH</button> </td>
+              <td> <button type="button" onclick="requestParams('joint_params[0]')">REQUEST</button> </td>
+            </tr>
+          </table>
+  	</tr>
+	<tr>
+          <td>
+	    #include"joint0_control.html"
+  	  </td>
+  	</tr>
+	<tr>
+          <table border="2">
+            <tr>
+	      <td> <button type="button" onclick="stop()">STOP</button> </td>
+	      <td> <button type="button" onclick="sendPacket('joint_control[0]')">SEND</button> </td>
+            </tr>
+          </table>
+  	</tr>
+      </table>
+    </p>
+</body>
+</html>
