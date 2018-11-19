@@ -50,3 +50,8 @@ void* dequeue(struct queue* q) {
   }
   return temp->data;
 }
+
+int isempty(struct queue* q) {
+  if (q->head == NULL && q->tail == NULL) return 1;
+  return 0;
+}

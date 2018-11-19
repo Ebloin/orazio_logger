@@ -14,13 +14,20 @@ gcc -Wall -Ofast --std=gnu99 -Iorazio_lib/src/common -Iorazio_lib/src/orazio_hos
 #include <pthread.h>
 #include <fcntl.h>
 #include <linux/joystick.h>
+#include <semaphore.h>
 
 #include "orazio_client.h"
 #include "orazio_print_packet.h"
 #include "orazio_client_test_getkey.h"
 #include "queue.h"
+#include "capture.h"
 
 #define NUM_JOINTS_MAX 4
+#define MAX_BUFFER_SIZE 999999
+#define MILLISECONDS_FRAME 200
+
+//Inizializzo i semafori
+sem_t empty, critical;
 
 typedef struct {
   int fd;
@@ -34,11 +41,14 @@ typedef struct {
 } JoyArgs;
 
 //Struttura pacchetto generico da aggiungere in coda
-typedef struct {
+typedef struct genData{
   int type;
   int ts;	//timestamp
-  void* packet;
-} genPacket;
+  void* data;
+} genData_t;
+
+#define GEN_DATA_ORAZIOPACKET 0
+#define GEN_DATA_IMAGE 1
 
 //Modifica il banner a piacimento
 const char* banner[] = {
@@ -56,6 +66,7 @@ const char* banner[] = {
   "options: ",
   "-serial-device <device>, (default: /dev/ttyACM0)",
   "-joy-device    <device>, (default: /dev/input/js0)",
+  "-packet-type   <1, 2, 3, 4> (NOT OPTIONAL!)",
   0
 };
 
@@ -72,7 +83,6 @@ typedef enum {
   Joints=1,
   Drive=2,
   Ranges=3,
-  None=4,
   Start=-1,
   Stop=-2
 } Mode;
@@ -89,6 +99,29 @@ static DifferentialDriveControlPacket drive_control={
   .translational_velocity=0,
   .rotational_velocity=0
 };
+
+//Strutture dei pacchetti da ricevere
+SystemStatusPacket system_status={
+  .header.type=SYSTEM_STATUS_PACKET_ID,
+  .header.size=sizeof(SystemStatusPacket)
+};
+SystemParamPacket system_params={
+  .header.type=SYSTEM_PARAM_PACKET_ID,
+  .header.size=sizeof(SystemParamPacket)
+};
+
+SonarStatusPacket sonar_status={
+  .header.type=SONAR_STATUS_PACKET_ID,
+  .header.size=sizeof(SonarStatusPacket)
+};
+
+DifferentialDriveStatusPacket drive_status = {
+  .header.type=DIFFERENTIAL_DRIVE_STATUS_PACKET_ID,
+  .header.size=sizeof(DifferentialDriveStatusPacket)
+};
+
+JointStatusPacket joint_status[NUM_JOINTS_MAX];
+
 
 //Funzione per lo STOP
 void stopRobot(void){
@@ -177,21 +210,6 @@ void* keyThread(void* arg){
       drive_control.rotational_velocity+=0.1;
       drive_control.header.seq=1;
       break;
-    case KeyS:
-      mode=System;
-      break;
-    case KeyR:
-      mode=Ranges;
-      break;
-    case KeyJ:
-      mode=Joints;
-      break;
-    case KeyD:
-      mode=Drive;
-      break;
-    case KeyX:
-      mode=None;
-      break;
     default:
       stopRobot();
     }
@@ -200,12 +218,119 @@ void* keyThread(void* arg){
   return 0;
 };
 
+//Thread che scrive sul file
+void* printfileThread(void* args) {
+  queue_t* q = (queue_t*)args;
+  FILE* out;
+  out = fopen("output.txt", "w+");
+  if (out == NULL) {
+    printf("Error on fopen\n");
+    exit(1);
+  }
+  while (mode!=Stop) {
+    //Controllo se la coda è vuota
+    sem_wait(&empty);
+    sem_wait(&critical);
+    //printf("\n");
+    genData_t* d = (genData_t*) dequeue(q);
+    sem_post(&critical);
+    int type = d->type;
+    int timestamp = d->ts;
+    switch (type) {
+      case GEN_DATA_IMAGE:
+        fprintf(out, "%d;\t\tFRAME;\t\t%s\n", timestamp, (char*)d->data);
+        break;
+      case GEN_DATA_ORAZIOPACKET:
+        fprintf(out, "%d;\t\tPACKET;\t\t%s\n", timestamp, (char*)d->data);
+        break;
+    }
+  }
+  printf("Chiudo il file\n");
+  fclose(out);
+  return 0;
+}
+
+
+void * getpictureThread(void* args) {
+  queue_t* q = (queue_t*) args;
+  camera_t* camera = camera_open("/dev/video0", 352, 288);
+  camera_init(camera);
+  camera_start(camera);
+  mkdir("output_frames", ACCESSPERMS);
+
+  struct timeval timeout;
+  timeout.tv_sec = 1;
+  timeout.tv_usec = 0;
+  // skip 5 frames for booting a cam
+  for (int i = 0; i < 5; i++) {
+    camera_frame(camera, timeout);
+  }
+  int timestamp;
+
+  while (mode != Stop) {
+    char nomefile [MAX_BUFFER_SIZE];
+    camera_frame(camera, timeout);
+    //Getto il timestamp per sincronizzarlo con i pacchetti di marrtino
+    switch (mode) {
+      case System:
+        timestamp = system_status.header.seq;
+        break;
+      case Joints:
+      //------------------------------------> FIX!!!!!!
+        timestamp = 0;
+        break;
+      case Ranges:
+        timestamp = sonar_status.header.seq;
+        break;
+      case Drive:
+        timestamp = drive_status.header.seq;
+        break;
+      default:;
+    }
+    sprintf(nomefile, "output_frames/%d.jpg", timestamp);
+    unsigned char* rgb = yuyv2rgb(camera->head.start, camera->width, camera->height);
+    FILE* out = fopen(nomefile, "w");
+    jpeg(out, rgb, camera->width, camera->height, 100);
+    fclose(out);
+    free(rgb);
+
+    genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
+    new_packet->type = GEN_DATA_IMAGE;
+    new_packet->ts = timestamp;
+    new_packet->data = (void*) nomefile;
+    sem_wait(&critical);
+    enqueue(q, (void*)new_packet);
+    sem_post(&empty);
+    sem_post(&critical);
+    usleep(MILLISECONDS_FRAME * 1000);
+  }
+
+  camera_stop(camera);
+  camera_finish(camera);
+  camera_close(camera);
+  return 0;
+}
+
 //Default devices tastiera e joy
 char* default_joy_device="/dev/input/js0";
 char* default_serial_device="/dev/ttyACM0";
 
 //-------------MAIN FUNCTION---------------
 int main(int argc, char** argv) {
+  int ret;
+  //Inizializzo i semafori per l'accesso alla coda
+  ret = sem_init(&empty, 0, 0);
+  if (ret == -1) {
+    printf("Error opening empty sem\n");
+    exit(1);
+  }
+
+  ret = sem_init(&critical, 0, 1);
+  if (ret == -1) {
+    printf("Error opening empty sem\n");
+    exit(1);
+  }
+
   //Inizializzo print_packet
   Orazio_printPacketInit();
 
@@ -226,37 +351,60 @@ int main(int argc, char** argv) {
       ++c;
       if (c<argc)
         joy_device=argv[c];
+    } else if (! strcmp(argv[c],"-packet-type")){
+      ++c;
+      //Attraverso -packet-type decido che tipo di pacchetti loggare
+      //---------------------------------------------------------------
+      /*
+      typedef enum {
+        PSystemStatusFlag=0x1,
+        PJointStatusFlag=0x2,
+        PDriveStatusFlag=0x4,
+        PSonarStatusFlag=0x8
+      } PeriodicUpdatePacketType;
+
+      E' una maschera del tipo 0000
+      ogni bit dice se il pacchetto verrà inviato o no
+      SYSTEM = 0001
+      JOINT = 0010
+      DRIVE = 0100
+      SONAR = 1000
+      */
+      //---------------------------------------------------------------
+      if (c<argc) {
+        switch(atoi(argv[c])) {
+          case 1:
+            mode= System;
+            printf("System_packets selected\n");
+            break;
+          case 2:
+            mode= Joints;
+            printf("Joints_packets selected\n");
+            break;
+          case 3:
+            mode= Drive;
+            printf("Drive_packets selected\n");
+            break;
+          case 4:
+            mode= Ranges;
+            printf("Ranges_packets selected\n");
+            break;
+        }
+      }
     }
     ++c;
+  }
+  //Se non selezioni la modalità il programma termina
+  if (mode == Start) {
+    printf("Packet type parameter not inserted\nUse -packet-type parameter to select what kind of packets you want to log:\n1 -> System_packets\n2 -> Joints_packets\n3 -> Drive_packets\n4 -> Sonar_packets");
+    exit(1);
   }
   printf("Starting %s with the following parameters\n", argv[0]);
   printf("-serial-device %s\n", serial_device);
   printf("-joy-device %s\n", joy_device);
 
-  //Strutture dei pacchetti da ricevere
-  SystemStatusPacket system_status={
-    .header.type=SYSTEM_STATUS_PACKET_ID,
-    .header.size=sizeof(SystemStatusPacket)
-  };
-
-  SystemParamPacket system_params={
-    .header.type=SYSTEM_PARAM_PACKET_ID,
-    .header.size=sizeof(SystemParamPacket)
-  };
-
-
-  SonarStatusPacket sonar_status={
-    .header.type=SONAR_STATUS_PACKET_ID,
-    .header.size=sizeof(SonarStatusPacket)
-  };
-
-
-  DifferentialDriveStatusPacket drive_status = {
-    .header.type=DIFFERENTIAL_DRIVE_STATUS_PACKET_ID,
-    .header.size=sizeof(DifferentialDriveStatusPacket)
-  };
-
-  JointStatusPacket joint_status[NUM_JOINTS_MAX];
+  //Inizializzo la coda
+  queue_t* data = createQueue();
 
   //Creo un orazio_client
   client=OrazioClient_init(serial_device, 115200);
@@ -287,25 +435,28 @@ int main(int argc, char** argv) {
   }
   int retries=10;
 
-  //---------------------------------------------------------------
-  //INSERISCI LA SCELTA DELLA MODALITA' DA LOGGARE
-
-  //------>TODO
-
-  //---------------------------------------------------------------
-
   //Prendo i system_params
   OrazioClient_get(client, (PacketHeader*)&system_params);
   //Setto la periodic_packet_mask
-  system_params.periodic_packet_mask=0;
+  switch(mode){
+  case System:
+    system_params.periodic_packet_mask=PSystemStatusFlag;
+    break;
+  case Joints:
+    system_params.periodic_packet_mask=PJointStatusFlag;
+    break;
+  case Ranges:
+    system_params.periodic_packet_mask=PSonarStatusFlag;
+    break;
+  case Drive:
+    system_params.periodic_packet_mask=PDriveStatusFlag;
+    break;
+  default:;
+  }
   //Mando il pacchetto
   OrazioClient_sendPacket(client, (PacketHeader*)&system_params, retries);
   //Riprendo i parametri modificati
   OrazioClient_get(client, (PacketHeader*)&system_params);
-
-  //Inizializzo la coda
-  queue_t* data = createQueue();
-
 
   //Start dei thread joy e key
   pthread_t key_thread;
@@ -323,22 +474,27 @@ int main(int argc, char** argv) {
   };
   pthread_create(&joy_thread, 0, joyThread,  &joy_args);
 
-  Mode previous_mode=mode;
+  pthread_t fileWriter_thread;
+  pthread_create(&fileWriter_thread, 0, printfileThread, data);
+
+  pthread_t camera_thread;
+  pthread_create(&camera_thread, 0, getpictureThread, data);
   //Inizio il loop principale che sarà in ascolto della
   //seriale e riceverà i pacchetti richiesti visualizzandoli
   //e scrivendoli su file, finchè non sarà selezionata
   //la modalità STOP
   while(mode!=Stop){
-	//Invio il pacchetto drive_control se diverso dal precedente
+    //Alloco la struttura pacchetto generio che sarà aggiunta nella coda
+    genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
+    new_packet->type = GEN_DATA_ORAZIOPACKET;
+
+	   //Invio il pacchetto drive_control se diverso dal precedente
     if(drive_control.header.seq) {
       int result = OrazioClient_sendPacket(client, (PacketHeader*)&drive_control, 0);
       if (result)
         printf("send error\n");
       drive_control.header.seq=0;
     }
-
-    //NON METTO LA POSSIBILITA' DEL CAMBIO PACCHETTO LIVE!!!!!!!!
-
     //Sincronizzo la seriale
     OrazioClient_sync(client,1);
 
@@ -349,27 +505,37 @@ int main(int argc, char** argv) {
     case System:
       OrazioClient_get(client, (PacketHeader*)&system_status);
       Orazio_printPacket(output_buffer,(PacketHeader*)&system_status);
+      new_packet->ts = system_status.header.seq;
       printf("\r\033[2K%s",output_buffer);
       break;
     case Joints:
       for (int i=0; i<num_joints; ++i) {
         OrazioClient_get(client, (PacketHeader*)&joint_status[i]);
         pos+=Orazio_printPacket(output_buffer+pos,(PacketHeader*)&joint_status[i]);
+        //new_packet->ts = joint_status[i].header.seq;
         printf("\r\033[2K%s",output_buffer);
       }
       break;
     case Ranges:
       OrazioClient_get(client, (PacketHeader*)&sonar_status);
       Orazio_printPacket(output_buffer,(PacketHeader*)&sonar_status);
+      new_packet->ts = sonar_status.header.seq;
       printf("\r\033[2K%s",output_buffer);
       break;
     case Drive:
       OrazioClient_get(client, (PacketHeader*)&drive_status);
       Orazio_printPacket(output_buffer,(PacketHeader*)&drive_status);
+      new_packet->ts = drive_status.header.seq;
       printf("\r\033[2K%s",output_buffer);
       break;
     default:;
     }
+
+    new_packet->data = (void*) output_buffer;
+    sem_wait(&critical);
+    enqueue(data, (void*)new_packet);
+    sem_post(&empty);
+    sem_post(&critical);
   }
 
   //Entrato nella modalità STOP posso terminare
@@ -382,6 +548,8 @@ int main(int argc, char** argv) {
   void* arg;
   pthread_join(key_thread, &arg);
   pthread_join(joy_thread, &arg);
+  pthread_join(fileWriter_thread, &arg);
+  pthread_join(camera_thread, &arg);
 
   printf("Stopping Robot");
   stopRobot();

@@ -81,7 +81,7 @@ static DifferentialDriveControlPacket drive_control={
 
 // to stop the robot we just schedule the sending
 // of a drive message with zero velocities
-// and we 
+// and we
 void stopRobot(void){
   drive_control.header.seq=0;
   drive_control.translational_velocity=0;
@@ -132,7 +132,7 @@ void* joyThread(void* args_){
           gain = 2.0;
         else
           gain = 1.0;
-      } 
+      }
       drive_control.rotational_velocity=rv*gain;
       drive_control.translational_velocity=tv*gain;
       drive_control.header.seq=1;
@@ -193,14 +193,14 @@ void* keyThread(void* arg){
 
 char* default_joy_device="/dev/input/js0";
 char* default_serial_device="/dev/ttyACM0";
-  
+
 int main(int argc, char** argv) {
   Orazio_printPacketInit();
   // parse the command line arguments
   int c=1;
   char* joy_device=default_joy_device;
   char* serial_device=default_serial_device;
-    
+
   while(c<argc){
     if (! strcmp(argv[c],"-h")){
         printMessage(banner);
@@ -220,7 +220,7 @@ int main(int argc, char** argv) {
   printf("-serial-device %s\n", serial_device);
   printf("-joy-device %s\n", joy_device);
 
-  
+
   // these variables are used locally in this thread
   // to interact with orazio client
   // it will read/write from/to these variables
@@ -241,14 +241,14 @@ int main(int argc, char** argv) {
     .header.size=sizeof(SonarStatusPacket)
   };
 
-  
+
   DifferentialDriveStatusPacket drive_status = {
     .header.type=DIFFERENTIAL_DRIVE_STATUS_PACKET_ID,
     .header.size=sizeof(DifferentialDriveStatusPacket)
   };
 
   JointStatusPacket joint_status[NUM_JOINTS_MAX];
-  
+
   // 1. create an orazio object and initialize it
   client=OrazioClient_init(serial_device, 115200);
   if (! client) {
@@ -256,7 +256,7 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  
+
   // 2. synchronize the serial protocol
   printf("Syncing ");
   for (int i=0; i<50; ++i){
@@ -271,7 +271,7 @@ int main(int argc, char** argv) {
     return -1;
   }
 
- 
+
   // 4. ask how many motors are on the platform
   //    and initialize the index of each joint
   //    the client will read the index from the destination
@@ -282,18 +282,18 @@ int main(int argc, char** argv) {
     joint_status[i].header.index=i;
   }
   int retries=10;
-  
+
   // 5. at the beginning we disable sending all packets, to minimize the burden on the serial line
   //    a: ask the clients for the system params (read during readConfiguration)
   OrazioClient_get(client, (PacketHeader*)&system_params);
   //    b: set the parameter you want to change
   system_params.periodic_packet_mask=0;
-  //    c: send the packet immediately, and try "retries" times, 
+  //    c: send the packet immediately, and try "retries" times,
   OrazioClient_sendPacket(client, (PacketHeader*)&system_params, retries);
   //    d: get the parameters refreshed
   OrazioClient_get(client, (PacketHeader*)&system_params);
 
-  
+
 
   // 6. we start a keyboard thread and a joystick thread
   //    these threads will write on
@@ -312,7 +312,7 @@ int main(int argc, char** argv) {
     .joy_device=joy_device
   };
   pthread_create(&joy_thread, 0, joyThread,  &joy_args);
-  
+
   Mode previous_mode=mode;
   // 7 the one below is the main loop
   //   the structure is:
@@ -334,7 +334,7 @@ int main(int argc, char** argv) {
         printf("send error\n");
       drive_control.header.seq=0;
     }
-    
+
     //here we control the packets sent by the host, depending on the current mode
     if (previous_mode!=mode){
       switch(mode){
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
         break;
       case Joints:
         system_params.periodic_packet_mask=PJointStatusFlag;
-        break;  
+        break;
       case Ranges:
         system_params.periodic_packet_mask=PSonarStatusFlag;
         break;
