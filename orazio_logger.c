@@ -23,7 +23,7 @@ gcc -Wall -Ofast --std=gnu99 -Iorazio_lib/src/common -Iorazio_lib/src/orazio_hos
 
 #define NUM_JOINTS_MAX 4
 #define MAX_BUFFER_SIZE 999999
-#define MILLISECONDS_FRAME 200
+#define MILLISECONDS_FRAME 50
 #define GEN_DATA_ORAZIOPACKET 0
 #define GEN_DATA_IMAGE 1
 
@@ -224,10 +224,13 @@ void * getpictureThread(void* args) {
   camera_t* camera = camera_open("/dev/video0", 352, 288);
   camera_init(camera);
   //do il tempo alla camera di inizializzarsi
-  sleep(1);
+  int i;
+  for (i=0; i<10; i++) {
+    camera_frame(camera);
+  }
   mkdir("output_frames", ACCESSPERMS);
 
-  while (mode != Stop) {
+  while (!(mode == Stop && isempty(q))) {
     char nomefile [MAX_BUFFER_SIZE];
     camera_frame(camera);
     int timestamp = 0;
@@ -267,8 +270,6 @@ void * getpictureThread(void* args) {
   }
 
   camera_stop(camera);
-  camera_finish(camera);
-  camera_close(camera);
   return 0;
 }
 

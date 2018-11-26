@@ -33,8 +33,10 @@ void quit(const char * msg)
   exit(EXIT_FAILURE);
 }
 
+
 camera_t* camera_open(const char * device, uint32_t width, uint32_t height)
 {
+  //Alloco la struttura di tipo camera con i relativi buffer e parametri
   int fd = open(device, O_RDWR | O_NONBLOCK, 0);
   if (fd == -1) quit("open");
   camera_t* camera = (camera_t*)malloc(sizeof (camera_t));
@@ -79,6 +81,7 @@ void camera_init(camera_t * camera) {
   buf.memory = V4L2_MEMORY_MMAP;
   buf.index = 0;
   if (ioctl(camera->fd, VIDIOC_QUERYBUF, &buf) == -1) quit("VIDIOC_QUERYBUF");
+  //Setto le dimensioni dei buffer
   camera->buffer.length = buf.length;
   camera->buffer.start = mmap(NULL, buf.length, PROT_READ | PROT_WRITE, MAP_SHARED, camera->fd, buf.m.offset);
   if (camera->buffer.start == MAP_FAILED) quit("mmap");
@@ -96,18 +99,34 @@ void camera_init(camera_t * camera) {
 
 
 int camera_frame(camera_t* camera) {
+  //Faccio la richiesta di buffer
   struct v4l2_buffer buf;
   memset(&buf, 0, sizeof buf);
   buf.type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
   buf.memory = V4L2_MEMORY_MMAP;
   if (ioctl(camera->fd, VIDIOC_DQBUF, &buf) == -1) return FALSE;
+  //Copio il frame cstturato dentro il campo frame della camera
   memcpy(camera->frame.start, camera->buffer.start, buf.bytesused);
   camera->frame.length = buf.bytesused;
   if (ioctl(camera->fd, VIDIOC_QBUF, &buf) == -1) return FALSE;
   return TRUE;
 }
 
-//NOT MINE
+void camera_stop(camera_t* camera)
+{
+  //Invio il comando di stream-off
+  enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
+  if (ioctl(camera->fd, VIDIOC_STREAMOFF, &type) == -1) quit("VIDIOC_STREAMOFF");
+  //Dealloco le strutture
+  munmap(camera->buffer.start, camera->buffer.length);
+  free(camera->frame.start);
+  camera->frame.length = 0;
+  camera->frame.start = NULL;
+  if (close(camera->fd) == -1) quit("close");
+  free(camera);
+}
+
+
 void
 jpeg(FILE* dest, uint8_t* rgb, uint32_t width, uint32_t height, int quality)
 {
@@ -170,26 +189,4 @@ uint8_t* yuyv2rgb(uint8_t* yuyv, uint32_t width, uint32_t height)
     }
   }
   return rgb;
-}
-
-
-void camera_stop(camera_t* camera)
-{
-  enum v4l2_buf_type type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-  if (ioctl(camera->fd, VIDIOC_STREAMOFF, &type) == -1)
-    quit("VIDIOC_STREAMOFF");
-}
-
-void camera_finish(camera_t* camera)
-{
-  munmap(camera->buffer.start, camera->buffer.length);
-  free(camera->frame.start);
-  camera->frame.length = 0;
-  camera->frame.start = NULL;
-}
-
-void camera_close(camera_t* camera)
-{
-  if (close(camera->fd) == -1) quit("close");
-  free(camera);
 }
