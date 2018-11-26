@@ -24,9 +24,11 @@ gcc -Wall -Ofast --std=gnu99 -Iorazio_lib/src/common -Iorazio_lib/src/orazio_hos
 #define NUM_JOINTS_MAX 4
 #define MAX_BUFFER_SIZE 999999
 #define MILLISECONDS_FRAME 50
-#define GEN_DATA_ORAZIOPACKET 0
-#define GEN_DATA_IMAGE 1
-
+#define GEN_DATA_IMAGE 0
+#define GEN_DATA_SYSTEMPACKET 1
+#define GEN_DATA_SONARPACKET 2
+#define GEN_DATA_DRIVEPACKET 3
+#define GEN_DATA_JOINTPACKET 4
 
 typedef struct {
   int fd;
@@ -46,12 +48,9 @@ typedef struct genData{
   void* data;
 } genData_t;
 
+
 //Modalità
 typedef enum {
-  System=0,
-  Joints=1,
-  Drive=2,
-  Ranges=3,
   Start=-1,
   Stop=-2
 } Mode;
@@ -88,12 +87,25 @@ static struct OrazioClient* client=0;
 char* default_joy_device="/dev/input/js0";
 char* default_serial_device="/dev/ttyACM0";
 sem_t empty, critical;
+int timestamp = 0;
 
 static void printMessage(const char** msg){
   while (*msg){
     printf("%s\n",*msg);
     ++msg;
   }
+}
+
+void addPacket(queue_t* q, char* packet, int timestamp, int type) {
+  genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
+  new_packet->type = type;
+  new_packet->ts = timestamp;
+  new_packet->data = (void*) packet;
+  sem_wait(&critical);
+  enqueue(q, (void*)new_packet);
+  sem_post(&empty);
+  sem_post(&critical);
+  return;
 }
 
 void stopRobot(void){
@@ -196,7 +208,7 @@ void* printfileThread(void* args) {
     printf("Error on fopen\n");
     exit(1);
   }
-  while (mode!=Stop) {
+  while (!(mode==Stop && isempty(q))) {
     //Controllo se la coda è vuota
     sem_wait(&empty);
     sem_wait(&critical);
@@ -207,11 +219,21 @@ void* printfileThread(void* args) {
     int timestamp = d->ts;
     switch (type) {
       case GEN_DATA_IMAGE:
-        fprintf(out, "%d;\t\tFRAME;\t\t%s\n", timestamp, (char*)d->data);
+        fprintf(out, "%05d;\tFRAME;\t%s\n", timestamp, (char*)d->data);
         break;
-      case GEN_DATA_ORAZIOPACKET:
-        fprintf(out, "%d;\t\tPACKET;\t\t%s\n", timestamp, (char*)d->data);
+      case GEN_DATA_DRIVEPACKET:
+        fprintf(out, "%05d;\tDRIVE;\t%s\n", timestamp, (char*)d->data);
         break;
+      case GEN_DATA_SONARPACKET:
+        fprintf(out, "%05d;\tSONAR;\t%s\n", timestamp, (char*)d->data);
+        break;
+      case GEN_DATA_SYSTEMPACKET:
+        fprintf(out, "%05d;\tSYSTEM;\t%s\n", timestamp, (char*)d->data);
+        break;
+      case GEN_DATA_JOINTPACKET:
+        fprintf(out, "%05d;\tJOINT;\t%s\n", timestamp, (char*)d->data);
+        break;
+      default:;
     }
   }
   printf("Chiudo il file\n");
@@ -230,27 +252,10 @@ void * getpictureThread(void* args) {
   }
   mkdir("output_frames", ACCESSPERMS);
 
-  while (!(mode == Stop && isempty(q))) {
+  while (mode != Stop) {
     char nomefile [MAX_BUFFER_SIZE];
     camera_frame(camera);
-    int timestamp = 0;
-    //Getto il timestamp per sincronizzarlo con i pacchetti di marrtino
-    switch (mode) {
-      case System:
-        timestamp = system_status.header.seq;
-        break;
-      case Joints:
-      //------------------------------------> FIX!!!!!!
-        timestamp = 0;
-        break;
-      case Ranges:
-        timestamp = sonar_status.header.seq;
-        break;
-      case Drive:
-        timestamp = drive_status.header.seq;
-        break;
-      default:;
-    }
+    int ts = timestamp;
     sprintf(nomefile, "output_frames/%d.jpg", timestamp);
     unsigned char* rgb = yuyv2rgb(camera->frame.start, camera->width, camera->height);
     FILE* out = fopen(nomefile, "w");
@@ -260,7 +265,7 @@ void * getpictureThread(void* args) {
 
     genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
     new_packet->type = GEN_DATA_IMAGE;
-    new_packet->ts = timestamp;
+    new_packet->ts = ts;
     new_packet->data = (void*) nomefile;
     sem_wait(&critical);
     enqueue(q, (void*)new_packet);
@@ -282,7 +287,6 @@ const char* banner[] = {
   "options: ",
   "-serial-device <device>, (default: /dev/ttyACM0)",
   "-joy-device    <device>, (default: /dev/input/js0)",
-  "-packet-type   <1, 2, 3, 4> (NOT OPTIONAL!)",
   0
 };
 
@@ -298,7 +302,7 @@ int main(int argc, char** argv) {
   }
   ret = sem_init(&critical, 0, 1);
   if (ret == -1) {
-    printf("Error opening empty sem\n");
+    printf("Error opening critical sem\n");
     exit(1);
   }
 
@@ -321,36 +325,8 @@ int main(int argc, char** argv) {
       ++c;
       if (c<argc)
         joy_device=argv[c];
-    } else if (! strcmp(argv[c],"-packet-type")){
-      ++c;
-      //Scelta del tipo di pacchetto da loggare
-      if (c<argc) {
-        switch(atoi(argv[c])) {
-          case 1:
-            mode= System;
-            printf("System_packets selected\n");
-            break;
-          case 2:
-            mode= Joints;
-            printf("Joints_packets selected\n");
-            break;
-          case 3:
-            mode= Drive;
-            printf("Drive_packets selected\n");
-            break;
-          case 4:
-            mode= Ranges;
-            printf("Ranges_packets selected\n");
-            break;
-        }
-      }
     }
     ++c;
-  }
-  //Se non selezioni la modalità il programma termina
-  if (mode == Start) {
-    printf("Packet type parameter not inserted\nUse -packet-type parameter to select what kind of packets you want to log:\n1 -> System_packets\n2 -> Joints_packets\n3 -> Drive_packets\n4 -> Sonar_packets");
-    exit(1);
   }
   printf("Starting %s with the following parameters\n", argv[0]);
   printf("-serial-device %s\n", serial_device);
@@ -388,21 +364,7 @@ int main(int argc, char** argv) {
 
   //Setto la periodic packet mask secondo i pacchetti che devo ricevere
   OrazioClient_get(client, (PacketHeader*)&system_params);
-  switch(mode){
-  case System:
-    system_params.periodic_packet_mask=PSystemStatusFlag;
-    break;
-  case Joints:
-    system_params.periodic_packet_mask=PJointStatusFlag;
-    break;
-  case Ranges:
-    system_params.periodic_packet_mask=PSonarStatusFlag;
-    break;
-  case Drive:
-    system_params.periodic_packet_mask=PDriveStatusFlag;
-    break;
-  default:;
-  }
+  system_params.periodic_packet_mask=0xF;
   OrazioClient_sendPacket(client, (PacketHeader*)&system_params, retries);
   OrazioClient_get(client, (PacketHeader*)&system_params);
 
@@ -430,9 +392,6 @@ int main(int argc, char** argv) {
 
   //----------------LOOP PRINCIPALE-------------------
   while(mode!=Stop){
-    //Alloco la struttura pacchetto generio che sarà aggiunta nella coda
-    genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
-    new_packet->type = GEN_DATA_ORAZIOPACKET;
 	   //Invio il pacchetto drive_control se diverso dal precedente
     if(drive_control.header.seq) {
       int result = OrazioClient_sendPacket(client, (PacketHeader*)&drive_control, 0);
@@ -443,48 +402,35 @@ int main(int argc, char** argv) {
     OrazioClient_sync(client,1);
 
     //Leggo l'output, lo visualizzo e lo aggiungo nella code di pacchetti
-    char output_buffer[1024];
+    char system_buffer[1024];
+    OrazioClient_get(client, (PacketHeader*)&system_status);
+    Orazio_printPacket(system_buffer,(PacketHeader*)&system_status);
+    addPacket(data, system_buffer, timestamp, GEN_DATA_SYSTEMPACKET);
+
+    char joint_buffer[1024];
     int pos=0;
-    switch(mode){
-    case System:
-      OrazioClient_get(client, (PacketHeader*)&system_status);
-      Orazio_printPacket(output_buffer,(PacketHeader*)&system_status);
-      new_packet->ts = system_status.header.seq;
-      printf("\r\033[2K%s",output_buffer);
-      break;
-    case Joints:
-      for (int i=0; i<num_joints; ++i) {
-        OrazioClient_get(client, (PacketHeader*)&joint_status[i]);
-        pos+=Orazio_printPacket(output_buffer+pos,(PacketHeader*)&joint_status[i]);
-        //new_packet->ts = joint_status[i].header.seq;
-        printf("\r\033[2K%s",output_buffer);
-      }
-      break;
-    case Ranges:
-      OrazioClient_get(client, (PacketHeader*)&sonar_status);
-      Orazio_printPacket(output_buffer,(PacketHeader*)&sonar_status);
-      new_packet->ts = sonar_status.header.seq;
-      printf("\r\033[2K%s",output_buffer);
-      break;
-    case Drive:
-      OrazioClient_get(client, (PacketHeader*)&drive_status);
-      Orazio_printPacket(output_buffer,(PacketHeader*)&drive_status);
-      new_packet->ts = drive_status.header.seq;
-      printf("\r\033[2K%s",output_buffer);
-      break;
-    default:;
+    for (int i=0; i<num_joints; ++i) {
+      OrazioClient_get(client, (PacketHeader*)&joint_status[i]);
+      pos+=Orazio_printPacket(joint_buffer+pos,(PacketHeader*)&joint_status[i]);
     }
-    //AGGIUNGO IL PACCHETTO NELLA CODA
-    new_packet->data = (void*) output_buffer;
-    sem_wait(&critical);
-    enqueue(data, (void*)new_packet);
-    sem_post(&empty);
-    sem_post(&critical);
+    addPacket(data, joint_buffer, timestamp, GEN_DATA_JOINTPACKET);
+
+    char sonar_buffer[1024];
+    OrazioClient_get(client, (PacketHeader*)&sonar_status);
+    Orazio_printPacket(sonar_buffer,(PacketHeader*)&sonar_status);
+    addPacket(data, sonar_buffer, timestamp, GEN_DATA_SONARPACKET);
+
+    char drive_buffer[1024];
+    OrazioClient_get(client, (PacketHeader*)&drive_status);
+    Orazio_printPacket(drive_buffer,(PacketHeader*)&drive_status);
+    addPacket(data, drive_buffer, timestamp, GEN_DATA_DRIVEPACKET);
+    printf("\r\033[2K%s",drive_buffer);
+    timestamp += 1;
   }
 
   //Entrato nella modalità STOP posso terminare
   //Chiudo file, telecamera e orazio
-  printf("Terminating\n");
+  printf("\nTerminating\n");
   if (joy_args.fd>0){
     close(joy_args.fd);
   }
