@@ -15,19 +15,18 @@ gcc -Wall -Ofast --std=gnu99 -Iorazio_lib/src/common -Iorazio_lib/src/orazio_hos
 #include <fcntl.h>
 #include <linux/joystick.h>
 #include <semaphore.h>
-
 #include "orazio_client.h"
 #include "orazio_print_packet.h"
 #include "orazio_client_test_getkey.h"
 #include "queue.h"
-#include "capture.h"
+#include "webcam_manager.h"
 
 #define NUM_JOINTS_MAX 4
 #define MAX_BUFFER_SIZE 999999
 #define MILLISECONDS_FRAME 200
+#define GEN_DATA_ORAZIOPACKET 0
+#define GEN_DATA_IMAGE 1
 
-//Inizializzo i semafori
-sem_t empty, critical;
 
 typedef struct {
   int fd;
@@ -47,36 +46,6 @@ typedef struct genData{
   void* data;
 } genData_t;
 
-#define GEN_DATA_ORAZIOPACKET 0
-#define GEN_DATA_IMAGE 1
-
-//Modifica il banner a piacimento
-const char* banner[] = {
-  "orazio_client_test",
-  " minimal program to connect to a configured orazio",
-  " use arrow keys or joystick to steer the robot",
-  " keys:",
-  " 's':    toggles system mode",
-  " 'j':    toggles joint mode",
-  " 'd':    toggles drive mode",
-  " 'r':    toggles sonar mode (ranges)",
-  " 'ESC'   quits the program",
-  "",
-  "usage: orazio_client_test [options]",
-  "options: ",
-  "-serial-device <device>, (default: /dev/ttyACM0)",
-  "-joy-device    <device>, (default: /dev/input/js0)",
-  "-packet-type   <1, 2, 3, 4> (NOT OPTIONAL!)",
-  0
-};
-
-static void printMessage(const char** msg){
-  while (*msg){
-    printf("%s\n",*msg);
-    ++msg;
-  }
-}
-
 //Modalità
 typedef enum {
   System=0,
@@ -87,11 +56,23 @@ typedef enum {
   Stop=-2
 } Mode;
 
-// display mode;
-Mode mode=Start;
-static struct OrazioClient* client=0;
-
-//Pacchetto per il controllo di Orazio
+//Strutture dei pacchetti da ricevere
+static SystemStatusPacket system_status={
+  .header.type=SYSTEM_STATUS_PACKET_ID,
+  .header.size=sizeof(SystemStatusPacket)
+};
+static SystemParamPacket system_params={
+  .header.type=SYSTEM_PARAM_PACKET_ID,
+  .header.size=sizeof(SystemParamPacket)
+};
+static SonarStatusPacket sonar_status={
+  .header.type=SONAR_STATUS_PACKET_ID,
+  .header.size=sizeof(SonarStatusPacket)
+};
+static DifferentialDriveStatusPacket drive_status = {
+  .header.type=DIFFERENTIAL_DRIVE_STATUS_PACKET_ID,
+  .header.size=sizeof(DifferentialDriveStatusPacket)
+};
 static DifferentialDriveControlPacket drive_control={
   .header.type=DIFFERENTIAL_DRIVE_CONTROL_PACKET_ID,
   .header.size=sizeof(DifferentialDriveControlPacket),
@@ -99,31 +80,22 @@ static DifferentialDriveControlPacket drive_control={
   .translational_velocity=0,
   .rotational_velocity=0
 };
+static JointStatusPacket joint_status[NUM_JOINTS_MAX];
 
-//Strutture dei pacchetti da ricevere
-SystemStatusPacket system_status={
-  .header.type=SYSTEM_STATUS_PACKET_ID,
-  .header.size=sizeof(SystemStatusPacket)
-};
-SystemParamPacket system_params={
-  .header.type=SYSTEM_PARAM_PACKET_ID,
-  .header.size=sizeof(SystemParamPacket)
-};
+//VARIABILI
+Mode mode=Start;
+static struct OrazioClient* client=0;
+char* default_joy_device="/dev/input/js0";
+char* default_serial_device="/dev/ttyACM0";
+sem_t empty, critical;
 
-SonarStatusPacket sonar_status={
-  .header.type=SONAR_STATUS_PACKET_ID,
-  .header.size=sizeof(SonarStatusPacket)
-};
+static void printMessage(const char** msg){
+  while (*msg){
+    printf("%s\n",*msg);
+    ++msg;
+  }
+}
 
-DifferentialDriveStatusPacket drive_status = {
-  .header.type=DIFFERENTIAL_DRIVE_STATUS_PACKET_ID,
-  .header.size=sizeof(DifferentialDriveStatusPacket)
-};
-
-JointStatusPacket joint_status[NUM_JOINTS_MAX];
-
-
-//Funzione per lo STOP
 void stopRobot(void){
   drive_control.header.seq=0;
   drive_control.translational_velocity=0;
@@ -131,7 +103,6 @@ void stopRobot(void){
   OrazioClient_sendPacket(client, (PacketHeader*)&drive_control, 0);
 }
 
-//Funzione del thread joystick
 void* joyThread(void* args_){
   JoyArgs* args=(JoyArgs*)args_;
   args->fd = open (args->joy_device, O_RDONLY|O_NONBLOCK);
@@ -185,7 +156,6 @@ void* joyThread(void* args_){
   return 0;
 };
 
-//Funzione del thread della tastiera
 void* keyThread(void* arg){
   setConioTerminalMode();
   while(mode!=Stop) {
@@ -218,7 +188,6 @@ void* keyThread(void* arg){
   return 0;
 };
 
-//Thread che scrive sul file
 void* printfileThread(void* args) {
   queue_t* q = (queue_t*)args;
   FILE* out;
@@ -250,26 +219,18 @@ void* printfileThread(void* args) {
   return 0;
 }
 
-
 void * getpictureThread(void* args) {
   queue_t* q = (queue_t*) args;
   camera_t* camera = camera_open("/dev/video0", 352, 288);
   camera_init(camera);
-  camera_start(camera);
+  //do il tempo alla camera di inizializzarsi
+  sleep(1);
   mkdir("output_frames", ACCESSPERMS);
-
-  struct timeval timeout;
-  timeout.tv_sec = 1;
-  timeout.tv_usec = 0;
-  // skip 5 frames for booting a cam
-  for (int i = 0; i < 5; i++) {
-    camera_frame(camera, timeout);
-  }
-  int timestamp;
 
   while (mode != Stop) {
     char nomefile [MAX_BUFFER_SIZE];
-    camera_frame(camera, timeout);
+    camera_frame(camera);
+    int timestamp = 0;
     //Getto il timestamp per sincronizzarlo con i pacchetti di marrtino
     switch (mode) {
       case System:
@@ -288,7 +249,7 @@ void * getpictureThread(void* args) {
       default:;
     }
     sprintf(nomefile, "output_frames/%d.jpg", timestamp);
-    unsigned char* rgb = yuyv2rgb(camera->head.start, camera->width, camera->height);
+    unsigned char* rgb = yuyv2rgb(camera->frame.start, camera->width, camera->height);
     FILE* out = fopen(nomefile, "w");
     jpeg(out, rgb, camera->width, camera->height, 100);
     fclose(out);
@@ -311,9 +272,19 @@ void * getpictureThread(void* args) {
   return 0;
 }
 
-//Default devices tastiera e joy
-char* default_joy_device="/dev/input/js0";
-char* default_serial_device="/dev/ttyACM0";
+
+const char* banner[] = {
+  "orazio_client_test",
+  " minimal program to connect to a configured orazio",
+  " use arrow keys or joystick to steer the robot",
+  "usage: orazio-logger [options]",
+  "options: ",
+  "-serial-device <device>, (default: /dev/ttyACM0)",
+  "-joy-device    <device>, (default: /dev/input/js0)",
+  "-packet-type   <1, 2, 3, 4> (NOT OPTIONAL!)",
+  0
+};
+
 
 //-------------MAIN FUNCTION---------------
 int main(int argc, char** argv) {
@@ -324,7 +295,6 @@ int main(int argc, char** argv) {
     printf("Error opening empty sem\n");
     exit(1);
   }
-
   ret = sem_init(&critical, 0, 1);
   if (ret == -1) {
     printf("Error opening empty sem\n");
@@ -333,7 +303,6 @@ int main(int argc, char** argv) {
 
   //Inizializzo print_packet
   Orazio_printPacketInit();
-
   //Controllo sui dispositivi
   int c=1;
   char* joy_device=default_joy_device;
@@ -353,24 +322,7 @@ int main(int argc, char** argv) {
         joy_device=argv[c];
     } else if (! strcmp(argv[c],"-packet-type")){
       ++c;
-      //Attraverso -packet-type decido che tipo di pacchetti loggare
-      //---------------------------------------------------------------
-      /*
-      typedef enum {
-        PSystemStatusFlag=0x1,
-        PJointStatusFlag=0x2,
-        PDriveStatusFlag=0x4,
-        PSonarStatusFlag=0x8
-      } PeriodicUpdatePacketType;
-
-      E' una maschera del tipo 0000
-      ogni bit dice se il pacchetto verrà inviato o no
-      SYSTEM = 0001
-      JOINT = 0010
-      DRIVE = 0100
-      SONAR = 1000
-      */
-      //---------------------------------------------------------------
+      //Scelta del tipo di pacchetto da loggare
       if (c<argc) {
         switch(atoi(argv[c])) {
           case 1:
@@ -413,7 +365,6 @@ int main(int argc, char** argv) {
     return -1;
   }
 
-  //Sincronizzo
   printf("Syncing ");
   for (int i=0; i<50; ++i){
     OrazioClient_sync(client,1);
@@ -422,7 +373,6 @@ int main(int argc, char** argv) {
   }
   printf(" Done\n");
 
-  //Leggi la configurazione
   if (OrazioClient_readConfiguration(client, 100)!=Success){
     return -1;
   }
@@ -435,9 +385,8 @@ int main(int argc, char** argv) {
   }
   int retries=10;
 
-  //Prendo i system_params
+  //Setto la periodic packet mask secondo i pacchetti che devo ricevere
   OrazioClient_get(client, (PacketHeader*)&system_params);
-  //Setto la periodic_packet_mask
   switch(mode){
   case System:
     system_params.periodic_packet_mask=PSystemStatusFlag;
@@ -453,12 +402,10 @@ int main(int argc, char** argv) {
     break;
   default:;
   }
-  //Mando il pacchetto
   OrazioClient_sendPacket(client, (PacketHeader*)&system_params, retries);
-  //Riprendo i parametri modificati
   OrazioClient_get(client, (PacketHeader*)&system_params);
 
-  //Start dei thread joy e key
+  //Starto tutti i thread necessari
   pthread_t key_thread;
   pthread_create(&key_thread, 0, keyThread, 0);
 
@@ -479,15 +426,12 @@ int main(int argc, char** argv) {
 
   pthread_t camera_thread;
   pthread_create(&camera_thread, 0, getpictureThread, data);
-  //Inizio il loop principale che sarà in ascolto della
-  //seriale e riceverà i pacchetti richiesti visualizzandoli
-  //e scrivendoli su file, finchè non sarà selezionata
-  //la modalità STOP
+
+  //----------------LOOP PRINCIPALE-------------------
   while(mode!=Stop){
     //Alloco la struttura pacchetto generio che sarà aggiunta nella coda
     genData_t* new_packet = (genData_t*) malloc (sizeof(genData_t));
     new_packet->type = GEN_DATA_ORAZIOPACKET;
-
 	   //Invio il pacchetto drive_control se diverso dal precedente
     if(drive_control.header.seq) {
       int result = OrazioClient_sendPacket(client, (PacketHeader*)&drive_control, 0);
@@ -495,7 +439,6 @@ int main(int argc, char** argv) {
         printf("send error\n");
       drive_control.header.seq=0;
     }
-    //Sincronizzo la seriale
     OrazioClient_sync(client,1);
 
     //Leggo l'output, lo visualizzo e lo aggiungo nella code di pacchetti
@@ -530,7 +473,7 @@ int main(int argc, char** argv) {
       break;
     default:;
     }
-
+    //AGGIUNGO IL PACCHETTO NELLA CODA
     new_packet->data = (void*) output_buffer;
     sem_wait(&critical);
     enqueue(data, (void*)new_packet);
